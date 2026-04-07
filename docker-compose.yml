@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  crosspoint-bot:
+  crosspoint-sendbot:
     build: .
-    container_name: crosspoint-bot
+    container_name: crosspoint-sendbot
     restart: unless-stopped
     environment:
       - API_ID=${API_ID}
@@ -13,5 +13,5 @@ services:
       - CROSSPOINT_IP=${CROSSPOINT_IP}
     volumes:
       - ./books:/books
-      - ./config.ini:/app/config.ini
+      - ./config:/config
     network_mode: host
