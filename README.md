@@ -1,60 +1,60 @@
 # Telegram Crosspoint Sendbot (v1.0.1)
 
-Bot de Telegram para enviar libros de forma inalámbrica a e-readers con firmware **Crosspoint Reader** (Xteink X4/X3).
+Telegram bot to wirelessly send books to e-readers using **Crosspoint Reader** firmware (Xteink X4/X3).
 
-## Características
+## Features
 
-- **Interactivo**: Pregunta el destino (Carpeta base o Autor) mediante botones Inline.
-- **Detección de Metadatos**: Intenta leer el autor automáticamente de archivos EPUB.
-- **Chat Limpio**: Elimina los archivos enviados y los mensajes de estado una vez procesados.
-- **Gestión de Carpetas**: Los libros se mueven de `/books/pending` a `/books/transfered` tras el éxito.
-- **Organización en el Lector**: Soporta la creación de subcarpetas por autor (configurable al vuelo).
+- **Interactive**: Asks for the destination (Base Folder or Author) using Inline buttons.
+- **Metadata Detection**: Attempts to read the author automatically from EPUB files.
+- **Clean Chat**: Deletes sent files and status messages once processed.
+- **Folder Management**: Books are moved from `/books/pending` to `/books/transfered` upon success.
+- **Organization on Reader**: Supports automatic subfolder creation by author (configurable on the fly).
 
-## Configuración del Entorno
+## Environment Setup
 
-### Variables de entorno (.env)
+### Environment Variables (.env)
 
 ```env
-BOT_TOKEN=tu_token_de_telegram
-AUTHORIZED_USER_ID=tu_id_de_usuario
+BOT_TOKEN=your_telegram_bot_token
+AUTHORIZED_USER_ID=your_telegram_user_id
 ```
 
-*(Nota: La IP y la carpeta base ahora se gestionan vía comandos interactivos y se guardan en `/config/config.ini` de forma persistente).*
+*(Note: The IP and base folder are now managed via interactive commands and persistently stored in `/config/config.ini`).*
 
-## Estructura de Carpetas
+## Folder Structure
 
 - **Local (Docker)**:
-  - `/books/pending`: Libros recibidos esperando a ser enviados.
-  - `/books/transfered`: Historial de libros ya enviados con éxito.
-  - `/config`: Contiene `config.ini` con tus ajustes persistentes (IP del lector, carpeta de guardado, etc.)
-- **Remoto (Lector)**:
-  - Ruta configurable mediante `/setfolder` (ej: `/Books`).
-  - Creación de subcarpetas automáticas según el autor, habilitable con `/setauthor`.
+  - `/books/pending`: Received books queued for upload.
+  - `/books/transfered`: History of successfully sent books.
+  - `/config`: Contains `config.ini` with your persistent settings (Reader IP, save folder, etc.)
+- **Remote (Reader)**:
+  - Base path configurable via `/setfolder` (e.g., `/Books`).
+  - Automatic author subfolder creation, toggleable using `/setauthor`.
 
-## Comandos
+## Commands
 
-- `/start` o `/help`: Muestra la configuración actual y la guía rápida.
-- `/status`: Realiza un ping API para verificar que el lector esté al alcance (File Transfer encendido).
-- `/id`: Muestra tu ID de Telegram (para configurarlo en el `.env`).
-- `/send`: Inicia la transferencia WiFi de todos los libros en la cola mostrando un resumen de éxito y errores al finalizar.
-- `/setcrosspointip <IP>`: Cambia la IP del lector de forma persistente.
-- `/setfolder <Ruta>`: Cambia la carpeta base en el lector (ej: `/Books`). (*Nota: `/crosspointfolder` sigue funcionando por compatibilidad*).
-- `/setauthor <on|off>`: Activa o desactiva la organización de los libros por subcarpetas de autor.
+- `/start` or `/help`: Shows the current configuration and quick guide.
+- `/status`: Performs an API ping to verify the reader is reachable (File Transfer enabled).
+- `/id`: Displays your Telegram ID (for `.env` setup).
+- `/send`: Initiates WiFi transfer of all queued books, showing a summary of successes and errors at the end.
+- `/setcrosspointip <IP>`: Persistently sets the reader's IP.
+- `/setfolder <Path>`: Sets the base folder on the reader (e.g., `/Books`). (*Note: `/crosspointfolder` is kept for retro-compatibility*).
+- `/setauthor <on|off>`: Enables/disables organizing books into author subfolders.
 
-## Flujo de Uso
+## Workflow
 
-1. **Envío**: Mandas un `.epub` al bot en Telegram.
-2. **Selección**: El bot detecta el autor y te da a elegir entre guardarlo en la raíz o en la carpeta del autor correspondiente.
-3. **Limpieza**: Tras elegir, el bot borra tu archivo del chat para mantener la privacidad.
-4. **Sincronización**: Entras en "File Transfer" en tu lector e-ink.
-5. **Verificación (Opcional)**: Usas `/status` para asegurar que está conectado.
-6. **Subida**: Ejecutas `/send` y el bot manda los archivos iterativamente y reporta qué ocurrió.
+1. **Upload**: Send an `.epub` file to the bot in Telegram.
+2. **Select**: The bot detects the author and lets you choose between saving to the root folder or the author's specific folder.
+3. **Cleanup**: After your choice, the bot deletes the file from the chat to maintain privacy.
+4. **Sync**: Launch "File Transfer" on your e-ink reader.
+5. **Verify (Optional)**: Use `/status` to ensure connection is active.
+6. **Send**: Run `/send`. The bot will iteratively transfer all files and report back the results.
 
-## Instalación
+## Installation
 
-1. Clona el repositorio.
-2. Configura el `.env` con tu User ID y Bot Token.
-3. Inicia el servidor mediante Docker:
+1. Clone the repository.
+2. Configure your `.env` file with your User ID and Bot Token.
+3. Start the server using Docker:
 
 ```bash
 docker-compose up -d --build
