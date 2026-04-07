@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  crosspoint-bot:
+    build: .
+    container_name: crosspoint-bot
+    restart: unless-stopped
+    environment:
+      - API_ID=${API_ID}
+      - API_HASH=${API_HASH}
+      - BOT_TOKEN=${BOT_TOKEN}
+      - AUTHORIZED_USER_ID=${AUTHORIZED_USER_ID}
+      - CROSSPOINT_IP=${CROSSPOINT_IP}
+    volumes:
+      - ./books:/books
+      - ./config.ini:/app/config.ini
+    network_mode: host
