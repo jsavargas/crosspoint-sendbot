@@ -6,11 +6,8 @@ services:
     container_name: crosspoint-sendbot
     restart: unless-stopped
     environment:
-      - API_ID=${API_ID}
-      - API_HASH=${API_HASH}
       - BOT_TOKEN=${BOT_TOKEN}
       - AUTHORIZED_USER_ID=${AUTHORIZED_USER_ID}
-      - CROSSPOINT_IP=${CROSSPOINT_IP}
     volumes:
       - ./books:/books
       - ./config:/config
