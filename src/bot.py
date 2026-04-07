@@ -96,25 +96,25 @@ def save_pending_metadata(data):
 
 def get_help_text(conf):
     return (
-        f"Crosspoint Sendbot v{BOT_VERSION} - Guia de uso\n\n"
-        "Este bot gestiona el envio de libros a tu lector Xteink.\n\n"
-        "Configuracion actual:\n"
+        f"Crosspoint Sendbot v{BOT_VERSION} - User Guide\n\n"
+        "This bot manages the wireless delivery of books to your Xteink e-reader.\n\n"
+        "Current Configuration:\n"
         f"IP: {conf['CROSSPOINT_IP']}\n"
-        f"Carpeta base: {conf['BASE_FOLDER']}\n"
-        f"Guardar por autor: {'Si' if conf.get('SAVE_BY_AUTHOR', True) else 'No'}\n\n"
-        "Comandos:\n"
-        "/send - Sube todos los libros pendientes.\n"
-        "/setcrosspointip <IP> - Cambia la IP del lector.\n"
-        "/setfolder <Ruta> - Define la carpeta base (ej: / o /Books).\n"
-        "/setauthor <on|off> - Activa o desactiva guardar por autor.\n"
-        "/status - Verifica la conexion con el lector.\n"
-        "/id - Muestra tu ID de Telegram.\n\n"
-        "Flujo de trabajo:\n"
-        "1. Envia un libro al bot.\n"
-        "2. Elige si guardarlo en la carpeta base o por autor (botones).\n"
-        "3. El bot limpiara el chat eliminando el archivo enviado.\n"
-        "4. Cuando estes listo, activa 'File Transfer' en el lector.\n"
-        "5. Ejecuta /send para subir todo."
+        f"Base folder: {conf['BASE_FOLDER']}\n"
+        f"Save by author: {'Yes' if conf.get('SAVE_BY_AUTHOR', True) else 'No'}\n\n"
+        "Commands:\n"
+        "/send - Upload all pending books.\n"
+        "/setcrosspointip <IP> - Change the reader's IP.\n"
+        "/setfolder <Path> - Define the base folder (e.g. / or /Books).\n"
+        "/setauthor <on|off> - Enable or disable saving by author.\n"
+        "/status - Check the connection with the reader.\n"
+        "/id - Show your Telegram ID.\n\n"
+        "Workflow:\n"
+        "1. Send a book to the bot.\n"
+        "2. Choose whether to save it in the root or by author (buttons).\n"
+        "3. The bot will clean the chat by deleting the sent file.\n"
+        "4. When ready, enable 'File Transfer' on the reader.\n"
+        "5. Run /send to upload everything."
     )
 
 async def post_init(application):
@@ -123,7 +123,7 @@ async def post_init(application):
     if AUTH_USER_ID:
         try:
             conf = get_config()
-            text = f"Crosspoint Sendbot v{BOT_VERSION} Iniciado\n\n" + get_help_text(conf)
+            text = f"Crosspoint Sendbot v{BOT_VERSION} Started\n\n" + get_help_text(conf)
             await application.bot.send_message(
                 chat_id=AUTH_USER_ID, 
                 text=text
@@ -149,31 +149,31 @@ async def set_folder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Update the base folder on the device."""
     if not await check_auth(update): return
     if not context.args:
-        await update.message.reply_text("Uso: /setfolder /Books")
+        await update.message.reply_text("Usage: /setfolder /Books")
         return
     conf = get_config()
     conf["BASE_FOLDER"] = context.args[0]
     save_config(conf)
-    await update.message.reply_text(f"Carpeta base actualizada a: {conf['BASE_FOLDER']}")
+    await update.message.reply_text(f"Base folder updated to: {conf['BASE_FOLDER']}")
 
 async def set_author(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Toggle saving by author."""
     if not await check_auth(update): return
     if not context.args or context.args[0].lower() not in ['on', 'off', 'true', 'false']:
-        await update.message.reply_text("Uso: /setauthor [on|off]")
+        await update.message.reply_text("Usage: /setauthor [on|off]")
         return
     
     val = context.args[0].lower() in ['on', 'true']
     conf = get_config()
     conf["SAVE_BY_AUTHOR"] = val
     save_config(conf)
-    await update.message.reply_text(f"Guardar por autor actualizado a: {'Activado' if val else 'Desactivado'}")
+    await update.message.reply_text(f"Save by author updated to: {'Enabled' if val else 'Disabled'}")
 
 async def set_ip(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Update the device IP address."""
     if not await check_auth(update): return
     if not context.args:
-        await update.message.reply_text("Uso: /setcrosspointip IP")
+        await update.message.reply_text("Usage: /setcrosspointip IP")
         return
     conf = get_config()
     conf["CROSSPOINT_IP"] = context.args[0]
@@ -314,18 +314,18 @@ async def send_to_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try: await status_msg.delete()
         except: pass
         
-        summary = "Resultados de subida:\n\n"
+        summary = "Upload Results:\n\n"
         if successes:
-            summary += f"✅ Exitosos ({len(successes)}):\n"
+            summary += f"✅ Successful ({len(successes)}):\n"
             for fname, tpath in successes:
                 summary += f"- {fname}\n  -> {tpath}\n"
         if failures:
-            summary += f"\n❌ Fallidos ({len(failures)}):\n"
+            summary += f"\n❌ Failed ({len(failures)}):\n"
             for fname, reason in failures:
                 summary += f"- {fname} ({reason})\n"
                 
         if len(summary) > 4000:
-            summary = summary[:4000] + "...\n(Mensaje muy largo, truncado)"
+            summary = summary[:4000] + "...\n(Message too long, truncated)"
             
         await update.message.reply_text(summary)
 
@@ -339,20 +339,20 @@ async def check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conf = get_config()
     ip = conf['CROSSPOINT_IP']
     
-    status_msg = await update.message.reply_text(f"Verificando conexión con {ip}...")
+    status_msg = await update.message.reply_text(f"Checking connection with {ip}...")
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.get(f"http://{ip}/api/status")
             if response.status_code == 200:
                 try:
                     data = response.json()
-                    await status_msg.edit_text(f"✅ Conexión exitosa a {ip}\nEstado:\n```json\n{json.dumps(data, indent=2)}\n```", parse_mode="MarkdownV2")
+                    await status_msg.edit_text(f"✅ Successful connection to {ip}\nStatus:\n```json\n{json.dumps(data, indent=2)}\n```", parse_mode="MarkdownV2")
                 except:
-                    await status_msg.edit_text(f"✅ Conexión exitosa a {ip}\n(Respuesta cruda):\n{response.text[:500]}")
+                    await status_msg.edit_text(f"✅ Successful connection to {ip}\n(Raw response):\n{response.text[:500]}")
             else:
-                await status_msg.edit_text(f"❌ El dispositivo respondió con error: HTTP {response.status_code}")
+                await status_msg.edit_text(f"❌ The device responded with an error: HTTP {response.status_code}")
     except Exception as e:
-        await status_msg.edit_text(f"❌ Error de conexión con {ip}:\n{str(e)}\n\nAsegúrate de que 'File Transfer' esté activo en el lector.")
+        await status_msg.edit_text(f"❌ Connection error with {ip}:\n{str(e)}\n\nMake sure 'File Transfer' is active on the reader.")
 
 async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Respond with the user's Telegram ID."""
