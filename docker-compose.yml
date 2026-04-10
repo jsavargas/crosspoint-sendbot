@@ -11,4 +11,6 @@ services:
     volumes:
       - ./books:/books
       - ./config:/config
+      - ./images:/images/sleep
+      - ./src:/app/src
     network_mode: host

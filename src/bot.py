@@ -24,15 +24,17 @@ TOKEN = os.getenv("BOT_TOKEN")
 AUTH_USER_ID = os.getenv("AUTHORIZED_USER_ID")
 CONFIG_FILE = Path("/config/config.ini")
 METADATA_FILE = Path("/books/pending_metadata.json")
-BOT_VERSION = "1.0.1"
+BOT_VERSION = "1.0.2"
 
 # Root book directory configuration
 PENDING_DIR = Path("/books/pending")
 TRANSFERED_DIR = Path("/books/transfered")
+BMP_DIR = Path("/images/sleep")
 
 # Ensure folders exist
 PENDING_DIR.mkdir(parents=True, exist_ok=True)
 TRANSFERED_DIR.mkdir(parents=True, exist_ok=True)
+BMP_DIR.mkdir(parents=True, exist_ok=True)
 
 # Detailed Logging Configuration
 logging.basicConfig(
@@ -104,6 +106,7 @@ def get_help_text(conf):
         f"Save by author: {'Yes' if conf.get('SAVE_BY_AUTHOR', True) else 'No'}\n\n"
         "Commands:\n"
         "/send - Upload all pending books.\n"
+        "/sendimages - Upload all BMP images.\n"
         "/setcrosspointip <IP> - Change the reader's IP.\n"
         "/setfolder <Path> - Define the base folder (e.g. / or /Books).\n"
         "/setauthor <on|off> - Enable or disable saving by author.\n"
@@ -119,7 +122,7 @@ def get_help_text(conf):
 
 async def post_init(application):
     """Notify the user that the bot is online."""
-    logger.info(f"[SYSTEM] Bot started v{BOT_VERSION}")
+    logger.info(f"[SYSTEM] Bot started v{BOT_VERSION} (with debug logging)")
     if AUTH_USER_ID:
         try:
             conf = get_config()
@@ -196,18 +199,68 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle incoming ebook documents."""
     if not await check_auth(update): return
     doc = update.message.document
-    file_path = PENDING_DIR / doc.file_name
+    mime = doc.mime_type or "unknown"
+    file_name = doc.file_name or "unnamed_file"
+    extension = file_name.lower().split('.')[-1] if '.' in file_name else ""
     
-    logger.info(f"[DOWNLOAD] Receiving: {doc.file_name}")
+    logger.info(f"[DEBUG] Document received: Name={file_name}, MIME={mime}, Size={doc.file_size}")
+    
+    # Validación de imagen
+    is_image = mime.startswith("image/") or extension in ['bmp', 'jpg', 'jpeg', 'png', 'gif', 'webp']
+    is_bmp = extension == "bmp"
+
+    if is_image and not is_bmp:
+        logger.warning(f"[DOWNLOAD] Imagen no BMP rechazada: {file_name} ({mime})")
+        await update.message.reply_text(
+            f"⚠️ Formato no soportado: `.{extension}`\n\n"
+            "Solo proceso imágenes en formato **.bmp**. Por favor, convierte tu imagen a BMP antes de enviarla como 'Archivo'."
+        )
+        return
+
+    target_dir = BMP_DIR if is_bmp else PENDING_DIR
+    file_path = target_dir / file_name
+    
+    logger.info(f"[DOWNLOAD] Guardando {'BMP ' if is_bmp else ''}en {file_path}")
     try:
         new_file = await context.bot.get_file(doc.file_id)
         await new_file.download_to_drive(custom_path=file_path)
         
-        await update.message.reply_text(f"Book received: {doc.file_name}\nUse /send to upload it to your device.")
+        if is_bmp:
+            await update.message.reply_text(f"✅ Imagen recibida: {file_name}\nUsa /sendimages para subirla al lector.")
+        else:
+            await update.message.reply_text(f"📚 Libro recibido: {file_name}\nUsa /send para subirlo al lector.")
         
     except Exception as e:
         logger.error(f"[DOWNLOAD] Error: {e}")
-        await update.message.reply_text("Error downloading book.")
+        await update.message.reply_text(f"❌ Error al descargar: {e}")
+
+async def handle_any_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Manejador fallback para registrar tipos de mensajes para depuración."""
+    if not update.message: return
+    
+    msg_type = "DESCONOCIDO"
+    details = ""
+    
+    if update.message.photo:
+        msg_type = "FOTO"
+        details = f"{len(update.message.photo)} tamaños disponibles"
+    elif update.message.video:
+        msg_type = "VÍDEO"
+        details = f"Nombre={update.message.video.file_name}, MIME={update.message.video.mime_type}"
+    elif update.message.audio:
+        msg_type = "AUDIO"
+        details = f"Nombre={update.message.audio.file_name}, MIME={update.message.audio.mime_type}"
+    elif update.message.text:
+        msg_type = "TEXTO"
+        details = f"Contenido='{update.message.text[:50]}...'"
+    
+    logger.info(f"[DEBUG] Mensaje no manejado recibido: Tipo={msg_type}, Detalles={details}")
+    
+    if msg_type == "FOTO":
+        await update.message.reply_text(
+            "📷 He recibido una foto, pero para mantener el formato BMP y la calidad original, "
+            "debes enviarla como un **'Archivo'** (o documento), no desde la galería."
+        )
 
 class ProgressFile:
     """Wrapper to track file read progress."""
@@ -226,8 +279,9 @@ class ProgressFile:
             p = int((self.uploaded / self.size) * 100)
             if p >= self.last_p + 10 or p == 100:
                 self.last_p = p
-                bar = "#" * (p // 10) + "-" * (10 - (p // 10))
-                asyncio.create_task(self.msg_callback(f"Uploading: {self.name}\n[{bar}] {p}%"))
+                # We don't create tasks here anymore to avoid hammering the API
+                # Instead, we just call the callback which should handle logic
+                self.msg_callback(self.name, p)
         return chunk
 
     def tell(self): return self.f.tell()
@@ -237,16 +291,24 @@ class ProgressFile:
 
 async def send_to_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Upload all pending books to the device."""
+    await _upload_wrapper(update, context, PENDING_DIR, "books")
+
+async def send_images_to_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Upload all pending images to the device."""
+    await _upload_wrapper(update, context, BMP_DIR, "images")
+
+async def _upload_wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, source_dir: Path, label: str):
+    """Generic wrapper for uploading files from a directory."""
     if not await check_auth(update): return
     conf = get_config()
     ip = conf['CROSSPOINT_IP']
-    files = list(PENDING_DIR.glob("*"))
+    files = list(source_dir.glob("*"))
     
     if not files:
-        await update.message.reply_text("No pending books in /books/pending.")
+        await update.message.reply_text(f"No pending {label} in {source_dir}.")
         return
 
-    logger.info(f"[UPLOAD] Starting upload process for {len(files)} files to {ip}")
+    logger.info(f"[UPLOAD] Starting upload process for {len(files)} {label} to {ip}")
     status_msg = await update.message.reply_text(f"Connecting to {ip}...")
     
     successes = []
@@ -262,34 +324,61 @@ async def send_to_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
             for file in files:
-                author = extract_author(file) if conf.get('SAVE_BY_AUTHOR', True) else None
-                base_f = conf['BASE_FOLDER']
-                if base_f != '/' and base_f.endswith('/'):
-                    base_f = base_f[:-1]
-                target_path = f"{base_f}/{author}" if author else (base_f if base_f else "/")
+                # Metadata extraction only for books
+                author = None
+                if label == "books" and conf.get('SAVE_BY_AUTHOR', True):
+                    author = extract_author(file)
+                
+                # Determine target path
+                if label == "images":
+                    target_dir_name = "sleep"  # Destino sin barra inicial para probar
+                    target_path = "/sleep"
+                else:
+                    base_f = conf['BASE_FOLDER']
+                    if base_f != '/' and base_f.endswith('/'):
+                        base_f = base_f[:-1]
+                    target_dir_name = author if author else ""
+                    target_path = f"{base_f}/{author}" if author else (base_f if base_f else "/")
+                
                 target_path = target_path.replace('//', '/')
                 
                 logger.info(f"[UPLOAD] File: {file.name} -> Target: {target_path}")
-                await status_msg.edit_text(f"Uploading: {file.name}...")
+                await status_msg.edit_text(f"Subiendo: {file.name}...")
                 
-                async def update_progress(text):
-                    try: await status_msg.edit_text(text)
-                    except: pass
+                # Ensure directory exists (mkdir)
+                if label == "images" or author:
+                    try:
+                        dir_to_create = "sleep" if label == "images" else author
+                        parent_path = "/" if label == "images" else conf['BASE_FOLDER']
+                        
+                        mkdir_files = {
+                            "name": (None, str(dir_to_create)),
+                            "path": (None, str(parent_path))
+                        }
+                        await client.post(f"http://{ip}/mkdir", files=mkdir_files)
+                    except Exception as e:
+                        logger.warning(f"[UPLOAD] mkdir failed for {target_path} (continuing): {e}")
 
-                pf = ProgressFile(file, update_progress)
+                last_edit_time = 0
+                async def update_progress(fname, p):
+                    nonlocal last_edit_time
+                    now = asyncio.get_event_loop().time()
+                    if now - last_edit_time < 1.0 and p < 100:
+                        return  # Throttle to 1 edit per second
+                    
+                    last_edit_time = now
+                    bar = "#" * (p // 10) + "-" * (10 - (p // 10))
+                    try: 
+                        await status_msg.edit_text(f"Subiendo: {fname}\n[{bar}] {p}%")
+                    except: 
+                        pass
+
+                def sync_update_progress(fname, p):
+                    asyncio.create_task(update_progress(fname, p))
+
+                pf = ProgressFile(file, sync_update_progress)
                 try:
-                    # Create directory if needed (using multipart/form-data)
-                    if author:
-                        try:
-                            mkdir_files = {
-                                "name": (None, str(author)),
-                                "path": (None, str(conf['BASE_FOLDER']))
-                            }
-                            await client.post(f"http://{ip}/mkdir", files=mkdir_files)
-                        except Exception as e:
-                            logger.warning(f"[UPLOAD] mkdir failed (expected if path exists): {e}")
-
-                    # Upload file (path should be a query parameter)
+                    # Upload file
                     response = await client.post(
                         f"http://{ip}/upload",
                         params={"path": target_path},
@@ -310,28 +399,28 @@ async def send_to_device(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 finally:
                     pf.close()
 
-        # Final cleanup and report
+        # Final report
         try: await status_msg.delete()
         except: pass
         
-        summary = "Upload Results:\n\n"
+        summary = f"Resultados del envío ({label}):\n\n"
         if successes:
-            summary += f"✅ Successful ({len(successes)}):\n"
+            summary += f"✅ Éxito ({len(successes)}):\n"
             for fname, tpath in successes:
                 summary += f"- {fname}\n  -> {tpath}\n"
         if failures:
-            summary += f"\n❌ Failed ({len(failures)}):\n"
+            summary += f"\n❌ Fallidos ({len(failures)}):\n"
             for fname, reason in failures:
                 summary += f"- {fname} ({reason})\n"
                 
         if len(summary) > 4000:
-            summary = summary[:4000] + "...\n(Message too long, truncated)"
+            summary = summary[:4000] + "...\n(Mensaje demasiado largo, truncado)"
             
         await update.message.reply_text(summary)
 
     except Exception as e:
-        logger.error(f"[SYSTEM] Unexpected error in send_to_device: {e}")
-        await update.message.reply_text(f"Critical error during upload: {e}")
+        logger.error(f"[SYSTEM] Unexpected error in _upload_wrapper: {e}")
+        await update.message.reply_text(f"Error crítico durante la subida: {e}")
 
 async def check_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Check the connection status with the eink reader."""
@@ -365,6 +454,7 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("help", start))
     app.add_handler(CommandHandler("id", id_command))
     app.add_handler(CommandHandler("send", send_to_device))
+    app.add_handler(CommandHandler("sendimages", send_images_to_device))
     app.add_handler(CommandHandler("setcrosspointip", set_ip))
     app.add_handler(CommandHandler("crosspointfolder", set_folder))
     app.add_handler(CommandHandler("setfolder", set_folder))
@@ -372,5 +462,6 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler("status", check_status))
     
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    app.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_any_message))
     
     app.run_polling()
